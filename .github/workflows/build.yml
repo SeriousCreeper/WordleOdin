@@ -25,7 +25,9 @@ jobs:
             libxinerama-dev libwayland-dev libxkbcommon-dev
 
       - name: Build
-        run: odin build . -out:builds/wordle-odin
+        run: |
+          mkdir -p builds
+          odin build . -out:builds/wordle-odin
 
       - name: Package
         run: |
@@ -52,7 +54,9 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build
-        run: odin build . -out:builds/wordle-odin.exe
+        run: |
+          mkdir -p builds
+          odin build . -out:builds/wordle-odin.exe
 
       - name: Package
         shell: bash
