@@ -50,6 +50,7 @@ Board :: struct {
 	messages:          [dynamic]Message,
 	guessed_letters:   map[rune]GuessState,
 	stateColors:       [GuessState]rl.Color,
+	last_screen_width: i32,
 }
 
 Message :: struct {
@@ -66,6 +67,7 @@ COLOR_FONT_DARK :: rl.Color{17, 17, 27, 255}
 DELETE_BUTTON_SPRITE: rl.Texture2D
 ANIMATION_SPEED :: 4
 ANIMATION_DELAY :: 0.5
+CAM_SCALE :: 1
 
 FONT: rl.Font
 CENTER_X: i32
@@ -2408,7 +2410,6 @@ main :: proc() {
 
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(800, 600, "Wordle in Odin")
-
 	defer rl.CloseWindow()
 
 	board := Board {
@@ -2420,6 +2421,14 @@ main :: proc() {
 		target_word       = strings.to_upper(rand.choice(VALID_WORDS), context.temp_allocator),
 		guessed_correctly = false,
 		stateColors       = StateColors,
+		last_screen_width = rl.GetScreenWidth(),
+	}
+
+	cam2d := rl.Camera2D {
+		rl.Vector2{f32(rl.GetScreenWidth() / 2), 0},
+		rl.Vector2{f32(rl.GetScreenWidth() / 2), 0},
+		0,
+		CAM_SCALE,
 	}
 
 	fmt.println("Target word: ", board.target_word)
@@ -2430,6 +2439,17 @@ main :: proc() {
 	rl.GuiSetFont(FONT)
 
 	for !rl.WindowShouldClose() {
+		if rl.GetScreenWidth() != board.last_screen_width {
+			board.last_screen_width = rl.GetScreenWidth()
+
+			cam2d = rl.Camera2D {
+				rl.Vector2{f32(rl.GetScreenWidth() / 2), 0},
+				rl.Vector2{f32(rl.GetScreenWidth() / 2), 0},
+				0,
+				CAM_SCALE,
+			}
+		}
+
 		CENTER_X = rl.GetScreenWidth() / 2
 		LEFT_CORNER = CENTER_X - i32(board.width * tile_spacing / 2)
 
@@ -2539,6 +2559,8 @@ main :: proc() {
 		rl.BeginDrawing()
 		rl.ClearBackground(COLOR_BG)
 
+		rl.BeginMode2D(cam2d)
+
 		tile_spacing :: (TILE_SIZE + TILE_GAP)
 
 		for y in 0 ..< board.height {
@@ -2628,6 +2650,8 @@ main :: proc() {
 		process_messages(&board, rl.GetFrameTime())
 		draw_keyboard(&board)
 		animate_letters(&board)
+
+		rl.EndMode2D()
 
 		rl.EndDrawing()
 	}
@@ -2823,7 +2847,6 @@ draw_keyboard_button :: proc(
 
 	return rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) && rl.IsMouseButtonPressed(.LEFT)
 }
-
 
 animate_letters :: proc(board: ^Board) {
 	for guess, i in board.guesses {
