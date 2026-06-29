@@ -35,7 +35,7 @@ LetterAnimation :: struct {
 Guess :: struct {
 	word:              string,
 	status:            [5]GuessState,
-	letter_animations: [5]LetterAnimation,
+	reveal_animations: [5]LetterAnimation,
 }
 
 Board :: struct {
@@ -43,6 +43,7 @@ Board :: struct {
 	height:            int,
 	guesses:           [dynamic]Guess,
 	input:             [dynamic]rune,
+	appear_animations: [5]LetterAnimation,
 	state:             GameState,
 	target_word:       string,
 	guessed_correctly: bool,
@@ -63,6 +64,8 @@ COLOR_BG :: rl.Color{30, 30, 46, 255}
 COLOR_FONT_BRIGHT :: rl.Color{205, 214, 244, 255}
 COLOR_FONT_DARK :: rl.Color{17, 17, 27, 255}
 DELETE_BUTTON_SPRITE: rl.Texture2D
+ANIMATION_SPEED :: 4
+ANIMATION_DELAY :: 0.5
 
 FONT: rl.Font
 CENTER_X: i32
@@ -2443,6 +2446,7 @@ main :: proc() {
 			}
 
 			if current_key == .BACKSPACE && len(board.input) > 0 {
+				board.appear_animations[len(board.input) - 1].animation_timer = 0
 				pop(&board.input)
 			}
 
@@ -2540,32 +2544,37 @@ main :: proc() {
 		for y in 0 ..< board.height {
 			pos_y := TOP_OFFSET + i32(y) * tile_spacing
 			scale_y: f32 = 1.0
+			scale_x: f32 = 1.0
 
 			for x in 0 ..< board.width {
 				letter_animation: LetterAnimation
 				pos_x := LEFT_CORNER + i32(x) * tile_spacing
 
 				if y < len(board.guesses) {
-					letter_animation = board.guesses[y].letter_animations[x]
+					letter_animation = board.guesses[y].reveal_animations[x]
 					scale_y = math.min(1, math.abs(letter_animation.animation_timer * 2 - 1))
+				} else if y == len(board.guesses) {
+					letter_animation = board.appear_animations[x]
+					scale_y = 1 + math.sin_f32(letter_animation.animation_timer * math.PI) * 0.2
+					scale_x = 1 + math.sin_f32(letter_animation.animation_timer * math.PI) * 0.2
 				}
 
 				if len(board.guesses) > y &&
 				   len(board.guesses[y].status) > x &&
 				   letter_animation.animation_timer >= 0.5 {
 					rl.DrawRectangle(
-						pos_x,
+						pos_x + i32(TILE_SIZE * (1 - scale_x) / 2),
 						pos_y + i32(TILE_SIZE * (1 - scale_y) / 2),
-						TILE_SIZE,
+						i32(TILE_SIZE * scale_x),
 						i32(TILE_SIZE * scale_y),
 						board.stateColors[board.guesses[y].status[x]],
 					)
 				}
 
 				rl.DrawRectangleLines(
-					pos_x,
+					pos_x + i32(TILE_SIZE * (1 - scale_x) / 2),
 					pos_y + i32(TILE_SIZE * (1 - scale_y) / 2),
-					TILE_SIZE,
+					i32(TILE_SIZE * scale_x),
 					i32(TILE_SIZE * scale_y),
 					rl.Color{69, 71, 90, 255},
 				)
@@ -2581,7 +2590,7 @@ main :: proc() {
 
 					font_color := board.guesses[y].status[x] == .Absent ? COLOR_FONT_BRIGHT : COLOR_FONT_DARK
 
-					if guess.letter_animations[x].animation_timer < 0.5 {
+					if guess.reveal_animations[x].animation_timer < 0.5 {
 						font_color = COLOR_FONT_BRIGHT
 					}
 
@@ -2664,6 +2673,11 @@ submit_word :: proc(board: ^Board) -> bool {
 				status = [5]GuessState{.Absent, .Absent, .Absent, .Absent, .Absent},
 			},
 		)
+
+		for x := 0; x < board.width; x += 1 {
+			board.appear_animations[x].animation_timer = 0
+		}
+
 		clear(&board.input)
 		board.state = .Resolving
 
@@ -2773,6 +2787,7 @@ draw_keyboard :: proc(board: ^Board) {
 
 	if draw_keyboard_button(FONT, delete_rect, "", rl.Color{69, 71, 90, 255}, COLOR_FONT_BRIGHT) {
 		if len(board.input) > 0 {
+			board.appear_animations[len(board.input) - 1].animation_timer = 0
 			pop(&board.input)
 		}
 	}
@@ -2814,14 +2829,24 @@ animate_letters :: proc(board: ^Board) {
 	for guess, i in board.guesses {
 		g := &board.guesses[i]
 
-		for letter, j in g.letter_animations {
-			l := &g.letter_animations[j]
+		for anim, j in g.reveal_animations {
+			l := &g.reveal_animations[j]
 
-			if (l.animation_timer >= 1) || (j > 0 && g.letter_animations[j - 1].animation_timer < 0.2) {
+			if (l.animation_timer >= 1) || (j > 0 && g.reveal_animations[j - 1].animation_timer < ANIMATION_DELAY) {
 				continue
 			}
 
-			l.animation_timer += rl.GetFrameTime() * 2
+			l.animation_timer += rl.GetFrameTime() * ANIMATION_SPEED
 		}
+	}
+
+	for letter, i in board.input {
+		l := &board.appear_animations[i]
+
+		if l.animation_timer >= 1 {
+			continue
+		}
+
+		l.animation_timer += rl.GetFrameTime() * ANIMATION_SPEED * 4
 	}
 }
