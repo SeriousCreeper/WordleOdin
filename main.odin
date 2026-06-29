@@ -28,9 +28,14 @@ StateColors :: [GuessState]rl.Color {
 	.Absent  = rl.Color{24, 24, 37, 255},
 }
 
+LetterAnimation :: struct {
+	animation_timer: f32,
+}
+
 Guess :: struct {
-	word:   string,
-	status: [5]GuessState,
+	word:              string,
+	status:            [5]GuessState,
+	letter_animations: [5]LetterAnimation,
 }
 
 Board :: struct {
@@ -2510,7 +2515,13 @@ main :: proc() {
 			break
 
 		case .Ended:
-			if draw_keyboard_button(FONT, rl.Rectangle{f32(CENTER_X) - 100, 800, 200, 50}, "Play Again", COLOR_FONT_DARK, COLOR_FONT_BRIGHT) {
+			if draw_keyboard_button(
+				FONT,
+				rl.Rectangle{f32(CENTER_X) - 100, 800, 200, 50},
+				"Play Again",
+				COLOR_FONT_DARK,
+				COLOR_FONT_BRIGHT,
+			) {
 				board.state = .Guessing
 				clear(&board.guesses)
 				clear(&board.guessed_letters)
@@ -2528,36 +2539,61 @@ main :: proc() {
 
 		for y in 0 ..< board.height {
 			pos_y := TOP_OFFSET + i32(y) * tile_spacing
+			scale_y: f32 = 1.0
 
 			for x in 0 ..< board.width {
+				letter_animation: LetterAnimation
 				pos_x := LEFT_CORNER + i32(x) * tile_spacing
 
-				if y >= len(board.guesses) {
-					rl.DrawRectangleLines(pos_x, pos_y, TILE_SIZE, TILE_SIZE, rl.Color{69, 71, 90, 255})
+				if y < len(board.guesses) {
+					letter_animation = board.guesses[y].letter_animations[x]
+					scale_y = math.min(1, math.abs(letter_animation.animation_timer * 2 - 1))
 				}
 
-				if len(board.guesses) > y && len(board.guesses[y].status) > x {
-					rl.DrawRectangle(pos_x, pos_y, TILE_SIZE, TILE_SIZE, board.stateColors[board.guesses[y].status[x]])
+				if len(board.guesses) > y &&
+				   len(board.guesses[y].status) > x &&
+				   letter_animation.animation_timer >= 0.5 {
+					rl.DrawRectangle(
+						pos_x,
+						pos_y + i32(TILE_SIZE * (1 - scale_y) / 2),
+						TILE_SIZE,
+						i32(TILE_SIZE * scale_y),
+						board.stateColors[board.guesses[y].status[x]],
+					)
 				}
-			}
 
-			if y < len(board.guesses) {
-				guess := board.guesses[y]
+				rl.DrawRectangleLines(
+					pos_x,
+					pos_y + i32(TILE_SIZE * (1 - scale_y) / 2),
+					TILE_SIZE,
+					i32(TILE_SIZE * scale_y),
+					rl.Color{69, 71, 90, 255},
+				)
 
-				for x in 0 ..< board.width {
+				if y < len(board.guesses) {
+					guess := board.guesses[y]
+
 					word_size := rl.MeasureTextEx(FONT, rl.TextFormat("%c", guess.word[x]), FONT_SIZE, 1)
 					position := rl.Vector2 {
-						f32(LEFT_CORNER + i32(x) * TILE_SIZE + (TILE_SIZE / 2) + i32(x * TILE_GAP) - i32(word_size.x / 2)),
-						f32(pos_y + (tile_spacing / 2) - i32(word_size.y) + (TILE_SIZE / 4)),
+						f32(LEFT_CORNER + i32(x) * TILE_SIZE + i32(TILE_GAP * x) + i32(TILE_SIZE / 2)),
+						f32(pos_y + (TILE_SIZE / 2)),
 					}
 
-					rl.DrawTextEx(
+					font_color := board.guesses[y].status[x] == .Absent ? COLOR_FONT_BRIGHT : COLOR_FONT_DARK
+
+					if guess.letter_animations[x].animation_timer < 0.5 {
+						font_color = COLOR_FONT_BRIGHT
+					}
+
+					rl.DrawTextPro(
 						FONT,
 						rl.TextFormat("%c", guess.word[x]),
 						position,
-						FONT_SIZE,
+						rl.Vector2{word_size.x * 0.5 * scale_y, word_size.y * 0.5 * scale_y},
+						0,
+						FONT_SIZE * scale_y,
 						1,
-						board.guesses[y].status[x] == .Absent ? COLOR_FONT_BRIGHT : COLOR_FONT_DARK,
+						font_color,
 					)
 				}
 			}
@@ -2568,14 +2604,21 @@ main :: proc() {
 
 			position := rl.Vector2 {
 				f32(LEFT_CORNER + i32(i) * TILE_SIZE + (TILE_SIZE / 2) + i32(i * TILE_GAP) - i32(word_size.x / 2)),
-				f32(TOP_OFFSET + i32(len(board.guesses)) * tile_spacing + (tile_spacing / 2) - i32(word_size.y) + (TILE_SIZE / 4)),
+				f32(
+					TOP_OFFSET +
+					i32(len(board.guesses)) * tile_spacing +
+					(tile_spacing / 2) -
+					i32(word_size.y) +
+					(TILE_SIZE / 4),
+				),
 			}
 
-			rl.DrawTextEx(FONT, rl.TextFormat("%c", r), position, FONT_SIZE, 1, rl.WHITE)
+			rl.DrawTextEx(FONT, rl.TextFormat("%c", r), position, FONT_SIZE, 1, COLOR_FONT_BRIGHT)
 		}
 
 		process_messages(&board, rl.GetFrameTime())
 		draw_keyboard(&board)
+		animate_letters(&board)
 
 		rl.EndDrawing()
 	}
@@ -2616,7 +2659,10 @@ submit_word :: proc(board: ^Board) -> bool {
 
 		append(
 			&board.guesses,
-			Guess{word = utf8.runes_to_string(board.input[:], context.temp_allocator), status = [5]GuessState{.Absent, .Absent, .Absent, .Absent, .Absent}},
+			Guess {
+				word = utf8.runes_to_string(board.input[:], context.temp_allocator),
+				status = [5]GuessState{.Absent, .Absent, .Absent, .Absent, .Absent},
+			},
 		)
 		clear(&board.input)
 		board.state = .Resolving
@@ -2657,7 +2703,12 @@ process_messages :: proc(board: ^Board, delta_time: f32) {
 		box_width := 20 + f32(text_size.x)
 		box_height := 10 + f32(text_size.y)
 
-		rl.DrawRectangleRounded(rl.Rectangle{f32(CENTER_X) - box_width / 2, 50 + offset_y, box_width, box_height}, 0.5, 8, rl.Color{255, 255, 255, alpha})
+		rl.DrawRectangleRounded(
+			rl.Rectangle{f32(CENTER_X) - box_width / 2, 50 + offset_y, box_width, box_height},
+			0.5,
+			8,
+			rl.Color{255, 255, 255, alpha},
+		)
 		rl.DrawTextEx(
 			FONT,
 			rl.TextFormat("%s", m.message),
@@ -2713,7 +2764,12 @@ draw_keyboard :: proc(board: ^Board) {
 	}
 
 	// draw delete button
-	delete_rect := rl.Rectangle{f32(CENTER_X) + f32(len(KEYBOARD_KEYS[2]) * (WIDTH + SPACING) / 2), TOP_OFFSET + 400 + 2 * (HEIGHT + SPACING), 100, HEIGHT}
+	delete_rect := rl.Rectangle {
+		f32(CENTER_X) + f32(len(KEYBOARD_KEYS[2]) * (WIDTH + SPACING) / 2),
+		TOP_OFFSET + 400 + 2 * (HEIGHT + SPACING),
+		100,
+		HEIGHT,
+	}
 
 	if draw_keyboard_button(FONT, delete_rect, "", rl.Color{69, 71, 90, 255}, COLOR_FONT_BRIGHT) {
 		if len(board.input) > 0 {
@@ -2721,10 +2777,22 @@ draw_keyboard :: proc(board: ^Board) {
 		}
 	}
 
-	rl.DrawTextureEx(DELETE_BUTTON_SPRITE, rl.Vector2{delete_rect.x + 22, delete_rect.y + 5}, 0, 0.1, COLOR_FONT_BRIGHT)
+	rl.DrawTextureEx(
+		DELETE_BUTTON_SPRITE,
+		rl.Vector2{delete_rect.x + 22, delete_rect.y + 5},
+		0,
+		0.1,
+		COLOR_FONT_BRIGHT,
+	)
 }
 
-draw_keyboard_button :: proc(font: rl.Font, rect: rl.Rectangle, text: cstring, color_button: rl.Color, color_text: rl.Color) -> bool {
+draw_keyboard_button :: proc(
+	font: rl.Font,
+	rect: rl.Rectangle,
+	text: cstring,
+	color_button: rl.Color,
+	color_text: rl.Color,
+) -> bool {
 	text_size := rl.MeasureTextEx(font, text, FONT_SIZE, 1)
 	rl.DrawRectangleRounded(rect, 0.25, 8, color_button)
 	rl.DrawTextPro(
@@ -2739,4 +2807,21 @@ draw_keyboard_button :: proc(font: rl.Font, rect: rl.Rectangle, text: cstring, c
 	)
 
 	return rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) && rl.IsMouseButtonPressed(.LEFT)
+}
+
+
+animate_letters :: proc(board: ^Board) {
+	for guess, i in board.guesses {
+		g := &board.guesses[i]
+
+		for letter, j in g.letter_animations {
+			l := &g.letter_animations[j]
+
+			if (l.animation_timer >= 1) || (j > 0 && g.letter_animations[j - 1].animation_timer < 0.2) {
+				continue
+			}
+
+			l.animation_timer += rl.GetFrameTime() * 2
+		}
+	}
 }
