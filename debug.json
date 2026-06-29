@@ -9,7 +9,7 @@
     "stopAtEntry": false,
     "build": {
       "command": "odin",
-      "args": ["build", "example", "-out:example/main", "-debug"],
+      "args": ["build", "-vet-shadowing"],
       "cwd": "$ZED_WORKTREE_ROOT"
     },
     "initCommands": ["settings set target.load-script-from-symbol-file true"]

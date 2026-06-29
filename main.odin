@@ -8,6 +8,7 @@ import "core:os"
 import "core:slice"
 import "core:strings"
 import "core:unicode/utf8"
+import ui "seriousui"
 import rl "vendor:raylib"
 
 GameState :: enum {
@@ -2436,9 +2437,12 @@ main :: proc() {
 	FONT = rl.LoadFont("assets/GoogleSans_17pt-SemiBold.ttf")
 	DELETE_BUTTON_SPRITE = rl.LoadTexture("assets/delete.png")
 
-	rl.GuiSetFont(FONT)
-
 	for !rl.WindowShouldClose() {
+		ui.begin()
+		ui.set_font(FONT)
+		ui.set_font_size(FONT_SIZE)
+		ui.set_font_color(COLOR_FONT_BRIGHT)
+
 		if rl.GetScreenWidth() != board.last_screen_width {
 			board.last_screen_width = rl.GetScreenWidth()
 
@@ -2539,13 +2543,9 @@ main :: proc() {
 			break
 
 		case .Ended:
-			if draw_keyboard_button(
-				FONT,
-				rl.Rectangle{f32(CENTER_X) - 100, 800, 200, 50},
-				"Play Again",
-				COLOR_FONT_DARK,
-				COLOR_FONT_BRIGHT,
-			) {
+			rect := rl.Rectangle{f32(CENTER_X) - 100, 800, 200, 50}
+
+			if keyboard_button("play_again", rect, "Play Again", COLOR_FONT_DARK) {
 				board.state = .Guessing
 				clear(&board.guesses)
 				clear(&board.guessed_letters)
@@ -2558,7 +2558,6 @@ main :: proc() {
 
 		rl.BeginDrawing()
 		rl.ClearBackground(COLOR_BG)
-
 		rl.BeginMode2D(cam2d)
 
 		tile_spacing :: (TILE_SIZE + TILE_GAP)
@@ -2650,9 +2649,9 @@ main :: proc() {
 		process_messages(&board, rl.GetFrameTime())
 		draw_keyboard(&board)
 		animate_letters(&board)
+		ui.draw_buttons()
 
 		rl.EndMode2D()
-
 		rl.EndDrawing()
 	}
 
@@ -2663,6 +2662,7 @@ main :: proc() {
 	delete(board.guessed_letters)
 
 	reset_tracking_allocator(&tracking_allocator)
+	free_all(context.temp_allocator)
 }
 
 is_valid_word :: proc(word: string) -> bool {
@@ -2773,12 +2773,12 @@ draw_keyboard :: proc(board: ^Board) {
 			rect := rl.Rectangle{f32(pos_x), f32(pos_y), WIDTH, HEIGHT}
 			guessed_letter, ok := board.guessed_letters[r]
 
-			draw_keyboard_button(
-				FONT,
+			ui.set_font_color(!ok || board.guessed_letters[r] == .Absent ? COLOR_FONT_BRIGHT : COLOR_FONT_DARK)
+			keyboard_button(
+				fmt.tprint("rune_%r", r),
 				rect,
-				rl.TextFormat("%c", r),
+				utf8.runes_to_string({r}, context.temp_allocator),
 				ok ? board.stateColors[board.guessed_letters[r]] : rl.Color{69, 71, 90, 255},
-				!ok || board.guessed_letters[r] == .Absent ? COLOR_FONT_BRIGHT : COLOR_FONT_DARK,
 			)
 
 			if rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) &&
@@ -2797,7 +2797,7 @@ draw_keyboard :: proc(board: ^Board) {
 		100,
 		HEIGHT,
 	}
-	if draw_keyboard_button(FONT, enter_rect, "Enter", rl.Color{69, 71, 90, 255}, COLOR_FONT_BRIGHT) {
+	if keyboard_button("enter", enter_rect, "Enter", rl.Color{69, 71, 90, 255}) {
 		submit_word(board)
 	}
 
@@ -2809,7 +2809,7 @@ draw_keyboard :: proc(board: ^Board) {
 		HEIGHT,
 	}
 
-	if draw_keyboard_button(FONT, delete_rect, "", rl.Color{69, 71, 90, 255}, COLOR_FONT_BRIGHT) {
+	if keyboard_button("delete", delete_rect, "", rl.Color{69, 71, 90, 255}) {
 		if len(board.input) > 0 {
 			board.appear_animations[len(board.input) - 1].animation_timer = 0
 			pop(&board.input)
@@ -2823,29 +2823,6 @@ draw_keyboard :: proc(board: ^Board) {
 		0.1,
 		COLOR_FONT_BRIGHT,
 	)
-}
-
-draw_keyboard_button :: proc(
-	font: rl.Font,
-	rect: rl.Rectangle,
-	text: cstring,
-	color_button: rl.Color,
-	color_text: rl.Color,
-) -> bool {
-	text_size := rl.MeasureTextEx(font, text, FONT_SIZE, 1)
-	rl.DrawRectangleRounded(rect, 0.25, 8, color_button)
-	rl.DrawTextPro(
-		font,
-		text,
-		rl.Vector2{rect.x + rect.width / 2, rect.y + rect.height / 2},
-		rl.Vector2{text_size.x / 2, text_size.y / 2},
-		0,
-		FONT_SIZE,
-		1,
-		color_text,
-	)
-
-	return rl.CheckCollisionPointRec(rl.GetMousePosition(), rect) && rl.IsMouseButtonPressed(.LEFT)
 }
 
 animate_letters :: proc(board: ^Board) {
@@ -2872,4 +2849,22 @@ animate_letters :: proc(board: ^Board) {
 
 		l.animation_timer += rl.GetFrameTime() * ANIMATION_SPEED * 4
 	}
+}
+
+keyboard_button :: proc(id: string, rect: rl.Rectangle, text: string, btn_color_normal: rl.Color) -> bool {
+	clicked := ui.button_rect(id, rect, text, btn_color_normal)
+	// current_animation, ok := ui.get_animation()
+
+	// if ok {
+	// 	if ui.is_hovering {
+	// 		//ui.animate(ui.last_id, 1, 3, 2, rl.GetFrameTime())
+	// 	} else {
+	// 		//ui.animate(ui.last_id, current_animation.cur, 1, 2, rl.GetFrameTime())
+	// 	}
+
+	// 	//rect^.height *= current_animation.cur
+	// 	//rect^.width *= current_animation.cur
+	// }
+
+	return clicked
 }
