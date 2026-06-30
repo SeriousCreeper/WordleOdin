@@ -12,8 +12,7 @@ FontSetting :: struct {
 	color: rl.Color,
 }
 
-ContextData :: struct {
-	id:             string,
+UIVisual :: struct {
 	rect:           rl.Rectangle,
 	text:           string,
 	btn_col_normal: rl.Color,
@@ -22,12 +21,30 @@ ContextData :: struct {
 	corners:        i32,
 }
 
-contextData: map[string]ContextData
+UIData :: struct {
+	id:          string,
+	startVisual: UIVisual,
+	curVisual:   UIVisual,
+}
+
+UIContext :: struct {
+	hot:    string,
+	active: string,
+}
+
+elements: map[string]UIData
+uiContext: UIContext
 
 font_setting: FontSetting = FontSetting{rl.LoadFont("assets/GoogleSans_17pt-SemiBold.ttf"), 16, rl.BLACK}
-is_hovering := false
 
 begin :: proc() {
+	uiContext.hot = ""
+	uiContext.active = ""
+}
+
+clean :: proc() {
+	delete(elements)
+	delete(animations)
 }
 
 set_font :: proc(font: rl.Font) {
@@ -42,6 +59,34 @@ set_font_color :: proc(color: rl.Color) {
 	font_setting.color = color
 }
 
+processVisual :: proc(id: string) -> UIVisual {
+	element, exists := elements[id]
+	if !exists {
+		return UIVisual{}
+	}
+
+	if id not_in animations {
+		return element.curVisual
+	}
+
+	anims := animations[id]
+	newVisual := element.curVisual
+
+	for type, _ in anims.anims {
+		#partial switch anim in type {
+		case Animation_F32:
+			rect := &newVisual.rect
+			rect.width *= anim.cur
+			rect.height *= anim.cur
+			rect.x -= (rect.width - element.curVisual.rect.width) / 2
+			rect.y -= (rect.height - element.curVisual.rect.height) / 2
+			break
+		}
+	}
+
+	return newVisual
+}
+
 button_rect :: proc(
 	id: string,
 	rect: rl.Rectangle,
@@ -50,27 +95,53 @@ button_rect :: proc(
 	btn_col_hover: rl.Color = rl.GRAY,
 	rounding: f32 = 0.25,
 	corners: i32 = 8,
-) -> bool {
-	contextData[id] = ContextData{id, rect, text, btn_col_normal, btn_col_hover, rounding, corners}
+) -> (
+	^UIData,
+	bool,
+) {
+	startVisual := UIVisual{rect, text, btn_col_normal, btn_col_hover, rounding, corners}
 
-	is_hovering = rl.CheckCollisionPointRec(rl.GetMousePosition(), rect)
+	if id not_in elements {
+		elements[id] = UIData{id, startVisual, startVisual}
+	}
 
-	return is_hovering && rl.IsMouseButtonPressed(.LEFT)
+	element := &elements[id]
+	element.curVisual = processVisual(id)
+
+	anim, exists := animations[id]
+
+	if uiContext.hot == "" && rl.CheckCollisionPointRec(rl.GetMousePosition(), element.curVisual.rect) {
+		uiContext.hot = id
+	}
+
+	rl.DrawRectangleLines(
+		i32(element.curVisual.rect.x),
+		i32(element.curVisual.rect.y),
+		i32(element.curVisual.rect.width),
+		i32(element.curVisual.rect.height),
+		rl.RED,
+	)
+
+	drawElement(id, element.curVisual)
+
+	v := &elements[id]
+
+	// TODO: This should happen on release, not on click
+	return element, uiContext.hot == id && rl.IsMouseButtonPressed(.LEFT)
 }
 
-draw_buttons :: proc() {
-	for id, data in contextData {
-		text_size := rl.MeasureTextEx(font_setting.font, rl.TextFormat("%s", data.text), font_setting.size, 1)
-		rl.DrawRectangleRounded(
-			data.rect,
-			data.rounding,
-			data.corners,
-			is_hovering ? data.btn_col_hover : data.btn_col_normal,
-		)
+drawElement :: proc(id: string, visual: UIVisual) {
+	anim, exists := &animations[id]
+
+	rl.DrawRectangleRounded(visual.rect, visual.rounding, visual.corners, visual.btn_col_normal)
+
+	if len(visual.text) > 0 {
+		text_size := rl.MeasureTextEx(font_setting.font, rl.TextFormat("%s", visual.text), font_setting.size, 1)
+
 		rl.DrawTextPro(
 			font_setting.font,
-			rl.TextFormat("%s", data.text),
-			rl.Vector2{data.rect.x + data.rect.width / 2, data.rect.y + data.rect.height / 2},
+			rl.TextFormat("%s", visual.text),
+			rl.Vector2{visual.rect.x + visual.rect.width / 2, visual.rect.y + visual.rect.height / 2},
 			rl.Vector2{text_size.x / 2, text_size.y / 2},
 			0,
 			font_setting.size,

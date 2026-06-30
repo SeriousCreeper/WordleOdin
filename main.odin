@@ -2442,6 +2442,7 @@ main :: proc() {
 		ui.set_font(FONT)
 		ui.set_font_size(FONT_SIZE)
 		ui.set_font_color(COLOR_FONT_BRIGHT)
+		ui.processAnimations(rl.GetFrameTime())
 
 		if rl.GetScreenWidth() != board.last_screen_width {
 			board.last_screen_width = rl.GetScreenWidth()
@@ -2649,7 +2650,7 @@ main :: proc() {
 		process_messages(&board, rl.GetFrameTime())
 		draw_keyboard(&board)
 		animate_letters(&board)
-		ui.draw_buttons()
+		//ui.drawElements()
 
 		rl.EndMode2D()
 		rl.EndDrawing()
@@ -2660,6 +2661,8 @@ main :: proc() {
 	delete(board.input)
 	delete(board.messages)
 	delete(board.guessed_letters)
+
+	ui.clean()
 
 	reset_tracking_allocator(&tracking_allocator)
 	free_all(context.temp_allocator)
@@ -2852,19 +2855,15 @@ animate_letters :: proc(board: ^Board) {
 }
 
 keyboard_button :: proc(id: string, rect: rl.Rectangle, text: string, btn_color_normal: rl.Color) -> bool {
-	clicked := ui.button_rect(id, rect, text, btn_color_normal)
-	// current_animation, ok := ui.get_animation()
+	uidata, clicked := ui.button_rect(id, rect, text, btn_color_normal)
 
-	// if ok {
-	// 	if ui.is_hovering {
-	// 		//ui.animate(ui.last_id, 1, 3, 2, rl.GetFrameTime())
-	// 	} else {
-	// 		//ui.animate(ui.last_id, current_animation.cur, 1, 2, rl.GetFrameTime())
-	// 	}
-
-	// 	//rect^.height *= current_animation.cur
-	// 	//rect^.width *= current_animation.cur
-	// }
+	if ui.uiContext.hot == id {
+		//ui.animate(id, 4, {ui.Animation_F32{to = 1.5}})
+		ui.animate_f32(&uidata.curVisual.rect.height, 60, 180)
+	} else {
+		//ui.animate(id, 4, {ui.Animation_F32{to = 1}})
+		ui.animate_f32(&uidata.curVisual.rect.height, 180, 60)
+	}
 
 	return clicked
 }
