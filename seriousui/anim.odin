@@ -6,33 +6,28 @@ import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
-Animation_F32 :: struct {
-	cur: f32,
-	to:  f32,
+AnimationType :: enum {
+	COLOR,
+	SCALE,
 }
 
-Animation_Color :: struct {
-	cur: rl.Color,
-	to:  rl.Color,
-}
-
-AnimationType :: union {
-	Animation_F32,
-	Animation_Color,
+AnimationId :: struct {
+	id:   string,
+	type: AnimationType,
 }
 
 AnimationData :: struct {
-	id:    string,
-	speed: f32,
-	anims: []AnimationType,
+	speed:     f32,
+	progress:  f32,
+	startVal:  f32,
+	targetVal: f32,
+	startCol:  rl.Color,
+	targetCol: rl.Color,
+	type:      AnimationType,
 }
 
 @(private)
-animations: map[string]AnimationData
-
-get_animation :: proc(id: string) -> AnimationData {
-	return animations[id]
-}
+animations: map[AnimationId]AnimationData
 
 move_towards :: proc(current, target, speed, dt: f32) -> f32 {
 	diff := target - current
@@ -45,49 +40,47 @@ move_towards :: proc(current, target, speed, dt: f32) -> f32 {
 	return current + math.sign(diff) * max_step
 }
 
-processAnimations :: proc(dt: f32) {
-	for index in animations {
-		data := &animations[index]
+animate :: proc(id: string, type: AnimationType, targetVal: f32 = 0, targetCol: rl.Color = rl.WHITE, speed: f32 = 1) {
+	animId := AnimationId{id, type}
 
-		for type, _ in data.anims {
-			switch &anim in type {
-			case Animation_F32:
-				anim.cur = move_towards(anim.cur, anim.to, data.speed, dt)
-				break
-
-			case Animation_Color:
-				anim.cur = rl.ColorLerp(anim.cur, anim.to, 1 - math.exp(-10.0 * dt))
-				break
-			}
+	if animId not_in animations {
+		animations[animId] = AnimationData {
+			startVal = targetVal,
+			startCol = targetCol,
 		}
 	}
-}
 
-animate :: proc(id: string, speed: f32, anims: []AnimationType) {
-	anim, exists := &animations[id]
+	anim, exists := &animations[animId]
 
-	if !exists {
-		for &type in anims {
-			switch &anim in type {
-			case Animation_F32:
-				anim.cur = 1
-			case Animation_Color:
-				anim.cur = 1
-			}
-		}
+	if anim.startVal != targetVal || anim.startCol != targetCol {
+		anim.startVal = targetVal
+		anim.startCol = targetCol
+		anim.progress = 1 - anim.progress
+	}
 
-		animations[id] = {
-			id    = id,
-			speed = speed,
-			anims = anims,
-		}
+	anim.speed = speed
+	anim.type = type
+	anim.targetVal = targetVal
+	anim.targetCol = targetCol
+
+	if (anim.progress >= 1) {
+		anim.progress = 1
 	} else {
-		anim.speed = speed
-		anim.anims = anims
+		anim.progress += rl.GetFrameTime() * speed
 	}
 }
 
+animateColor :: proc(id: string, targetColor: rl.Color) {
+	animId := AnimationId{id, .COLOR}
 
+	if animId not_in animations {
+		return
+	}
+
+	anim := &animations[animId]
+}
+
+/* Animation system to modify one specific value
 NewAnim :: struct {
 	startTime:  f32,
 	changeTime: f32,
@@ -97,7 +90,6 @@ NewAnim :: struct {
 }
 
 newAnims: map[^f32]NewAnim
-
 
 animate_f32 :: proc(value: ^f32, from, to: f32) {
 	if value not_in newAnims {
@@ -126,3 +118,4 @@ animate_f32 :: proc(value: ^f32, from, to: f32) {
 
 	value^ = math.lerp(from, to, anim.progress)
 }
+*/

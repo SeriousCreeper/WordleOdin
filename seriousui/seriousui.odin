@@ -1,5 +1,7 @@
 package seriousui
 
+DEBUG_ENABLED :: false
+
 import "core:fmt"
 import "core:strings"
 import rl "vendor:raylib"
@@ -65,26 +67,25 @@ processVisual :: proc(id: string) -> UIVisual {
 		return UIVisual{}
 	}
 
-	if id not_in animations {
-		return element.curVisual
-	}
+	newVisual := &element.curVisual
 
-	anims := animations[id]
-	newVisual := element.curVisual
+	for type in AnimationType {
+		animId := AnimationId{id, type}
 
-	for type, _ in anims.anims {
-		#partial switch anim in type {
-		case Animation_F32:
-			rect := &newVisual.rect
-			rect.width *= anim.cur
-			rect.height *= anim.cur
-			rect.x -= (rect.width - element.curVisual.rect.width) / 2
-			rect.y -= (rect.height - element.curVisual.rect.height) / 2
+		if animId not_in animations {
+			continue
+		}
+
+		anim := animations[animId]
+
+		#partial switch type {
+		case .COLOR:
+			newVisual.btn_col_normal = rl.ColorLerp(anim.startCol, anim.targetCol, anim.progress)
 			break
 		}
 	}
 
-	return newVisual
+	return newVisual^
 }
 
 button_rect :: proc(
@@ -100,39 +101,30 @@ button_rect :: proc(
 	bool,
 ) {
 	startVisual := UIVisual{rect, text, btn_col_normal, btn_col_hover, rounding, corners}
-
-	if id not_in elements {
-		elements[id] = UIData{id, startVisual, startVisual}
-	}
-
+	elements[id] = UIData{id, startVisual, startVisual}
 	element := &elements[id]
-	element.curVisual = processVisual(id)
-
-	anim, exists := animations[id]
 
 	if uiContext.hot == "" && rl.CheckCollisionPointRec(rl.GetMousePosition(), element.curVisual.rect) {
 		uiContext.hot = id
 	}
 
-	rl.DrawRectangleLines(
-		i32(element.curVisual.rect.x),
-		i32(element.curVisual.rect.y),
-		i32(element.curVisual.rect.width),
-		i32(element.curVisual.rect.height),
-		rl.RED,
-	)
+	if DEBUG_ENABLED {
+		rl.DrawRectangleLines(
+			i32(element.curVisual.rect.x),
+			i32(element.curVisual.rect.y),
+			i32(element.curVisual.rect.width),
+			i32(element.curVisual.rect.height),
+			rl.RED,
+		)
+	}
 
-	drawElement(id, element.curVisual)
-
-	v := &elements[id]
+	drawElement(id, element.startVisual)
 
 	// TODO: This should happen on release, not on click
 	return element, uiContext.hot == id && rl.IsMouseButtonPressed(.LEFT)
 }
 
 drawElement :: proc(id: string, visual: UIVisual) {
-	anim, exists := &animations[id]
-
 	rl.DrawRectangleRounded(visual.rect, visual.rounding, visual.corners, visual.btn_col_normal)
 
 	if len(visual.text) > 0 {

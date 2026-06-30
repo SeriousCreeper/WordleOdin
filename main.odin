@@ -2442,7 +2442,7 @@ main :: proc() {
 		ui.set_font(FONT)
 		ui.set_font_size(FONT_SIZE)
 		ui.set_font_color(COLOR_FONT_BRIGHT)
-		ui.processAnimations(rl.GetFrameTime())
+		//ui.processAnimations(rl.GetFrameTime())
 
 		if rl.GetScreenWidth() != board.last_screen_width {
 			board.last_screen_width = rl.GetScreenWidth()
@@ -2856,14 +2856,5 @@ animate_letters :: proc(board: ^Board) {
 
 keyboard_button :: proc(id: string, rect: rl.Rectangle, text: string, btn_color_normal: rl.Color) -> bool {
 	uidata, clicked := ui.button_rect(id, rect, text, btn_color_normal)
-
-	if ui.uiContext.hot == id {
-		//ui.animate(id, 4, {ui.Animation_F32{to = 1.5}})
-		ui.animate_f32(&uidata.curVisual.rect.height, 60, 180)
-	} else {
-		//ui.animate(id, 4, {ui.Animation_F32{to = 1}})
-		ui.animate_f32(&uidata.curVisual.rect.height, 180, 60)
-	}
-
 	return clicked
 }
