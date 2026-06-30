@@ -15,12 +15,11 @@ FontSetting :: struct {
 }
 
 UIVisual :: struct {
-	rect:           rl.Rectangle,
-	text:           string,
-	btn_col_normal: rl.Color,
-	btn_col_hover:  rl.Color,
-	rounding:       f32,
-	corners:        i32,
+	rect:        rl.Rectangle,
+	text:        string,
+	colorButton: rl.Color,
+	rounding:    f32,
+	corners:     i32,
 }
 
 UIData :: struct {
@@ -80,7 +79,7 @@ processVisual :: proc(id: string) -> UIVisual {
 
 		#partial switch type {
 		case .COLOR:
-			newVisual.btn_col_normal = rl.ColorLerp(anim.startCol, anim.targetCol, anim.progress)
+			//newVisual.btn_col_normal = rl.ColorLerp(anim.startCol, anim.targetCol, anim.progress)
 			break
 		}
 	}
@@ -92,20 +91,21 @@ button_rect :: proc(
 	id: string,
 	rect: rl.Rectangle,
 	text: string,
-	btn_col_normal: rl.Color,
-	btn_col_hover: rl.Color = rl.GRAY,
+	btn_col_normal: rl.Color = rl.GRAY,
+	btn_col_hover: rl.Color = rl.DARKGRAY,
 	rounding: f32 = 0.25,
 	corners: i32 = 8,
 ) -> (
 	^UIData,
 	bool,
 ) {
-	startVisual := UIVisual{rect, text, btn_col_normal, btn_col_hover, rounding, corners}
+	startVisual := UIVisual{rect, text, btn_col_normal, rounding, corners}
 	elements[id] = UIData{id, startVisual, startVisual}
 	element := &elements[id]
 
 	if uiContext.hot == "" && rl.CheckCollisionPointRec(rl.GetMousePosition(), element.curVisual.rect) {
 		uiContext.hot = id
+		element.startVisual.colorButton = btn_col_hover
 	}
 
 	if DEBUG_ENABLED {
@@ -125,7 +125,7 @@ button_rect :: proc(
 }
 
 drawElement :: proc(id: string, visual: UIVisual) {
-	rl.DrawRectangleRounded(visual.rect, visual.rounding, visual.corners, visual.btn_col_normal)
+	rl.DrawRectangleRounded(visual.rect, visual.rounding, visual.corners, visual.colorButton)
 
 	if len(visual.text) > 0 {
 		text_size := rl.MeasureTextEx(font_setting.font, rl.TextFormat("%s", visual.text), font_setting.size, 1)
